@@ -1,8 +1,9 @@
 # Dataset and Student Resources
-student_resource/
+student_resource/dataset/
 dataset/
 *.tsv
 *.csv
+*.pkl
 
 # Python / Environment
 .venv/
@@ -20,6 +21,7 @@ dist/
 
 # Output & Artifacts
 output/
+models/
 *.log
 
 # IDE & OS

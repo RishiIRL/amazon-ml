@@ -1,0 +1,48 @@
+# Main Configuration for Amazon ML Entity Resolution Pipeline
+
+paths:
+  train_dir: "student_resource/dataset/train"
+  test_dir: "student_resource/dataset/test"
+  ground_truth_path: "student_resource/dataset/train/train_ground_truth.tsv"
+  output_dir: "output"
+  matching_results: "output/matching_results.tsv"
+  candidate_pairs: "output/candidate_pairs.tsv"
+  model_dir: "models"
+  model_checkpoint: "models/entity_matcher.pkl"
+
+preprocessing:
+  normalize_unicode: true
+  unicode_form: "NFKC"
+  lowercase: true
+  strip_punctuation: false
+  transliterate_indic: true
+  use_ai4bharat: true
+  target_scheme: "ITRANS"
+
+blocking:
+  generator_type: "simple"
+  max_candidates_per_entity: 100
+  min_blocking_score: 0.1
+
+features:
+  use_name_similarity: true
+  use_address_similarity: true
+  use_country_agreement: true
+  similarity_metrics:
+    - "token_sort_ratio"
+    - "token_set_ratio"
+    - "levenshtein_ratio"
+    - "jaro_winkler"
+
+model:
+  type: "entity_matcher"
+  threshold: 0.5
+  weights:
+    name_similarity: 0.5
+    address_similarity: 0.3
+    country_agreement: 0.2
+
+evaluation:
+  primary_metric: "macro_f0_5"
+  beta: 0.5
+  evaluate_candidate_recall: true

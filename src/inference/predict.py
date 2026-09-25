@@ -1,7 +1,7 @@
 import csv
 import logging
 from pathlib import Path
-from typing import Dict, List, Sequence, Set, Tuple, Union
+from typing import Any, Dict, List, Sequence, Set, Tuple, Union
 
 from src.data.loader import DatasetLoader
 from src.data.schema import BusinessRecord
@@ -65,35 +65,85 @@ def export_submission(
             writer.writerow([s1_id, cand_str])
 
 
+def load_config(config_path: str = "configs/config.yaml") -> Dict[str, Any]:
+    """Load configuration dictionary from YAML file."""
+    path = Path(config_path)
+    if not path.exists():
+        logger.warning("Config path %s not found. Using default parameters.", config_path)
+        return {}
+    with open(path, "r", encoding="utf-8") as f:
+        import yaml
+        return yaml.safe_load(f) or {}
+
+
 def run_inference_pipeline(
-    test_dir: str = "student_resource/dataset/test",
-    matching_filepath: str = "output/matching_results.tsv",
-    candidate_filepath: str = "output/candidate_pairs.tsv",
+    config: Union[str, Dict[str, Any]] = "configs/config.yaml"
 ) -> None:
-    """Run complete test dataset inference pipeline."""
-    logger.info("Loading test datasets from %s", test_dir)
+    """Run complete test dataset inference pipeline using configuration."""
+    if isinstance(config, str):
+        cfg = load_config(config)
+    else:
+        cfg = config
+
+    paths_cfg = cfg.get("paths", {})
+    prep_cfg = cfg.get("preprocessing", {})
+    block_cfg = cfg.get("blocking", {})
+    model_cfg = cfg.get("model", {})
+
+    test_dir = paths_cfg.get("test_dir", "student_resource/dataset/test")
+    matching_filepath = paths_cfg.get("matching_results", "output/matching_results.tsv")
+    candidate_filepath = paths_cfg.get("candidate_pairs", "output/candidate_pairs.tsv")
+    model_checkpoint = paths_cfg.get("model_checkpoint", "models/entity_matcher.pkl")
+
+    logger.info("Loading test datasets from %s...", test_dir)
     loader = DatasetLoader(test_dir)
     s1, s2, s3 = loader.load_sources()
 
-    logger.info("Normalizing text fields...")
-    normalizer = UnicodeNormalizer()
-    s1_norm = normalizer.normalize_dataset(s1)
-    s2_norm = normalizer.normalize_dataset(s2)
-    s3_norm = normalizer.normalize_dataset(s3)
+    logger.info("Normalizing and transliterating test records...")
+    from src.preprocessing.transliteration import ScriptAwareTransliterator
+    normalizer = UnicodeNormalizer(
+        form=prep_cfg.get("unicode_form", "NFKC"),
+        lowercase=prep_cfg.get("lowercase", True),
+        strip_whitespace=True,
+    )
+    transliterator = ScriptAwareTransliterator(
+        target_scheme=prep_cfg.get("target_scheme", "ITRANS"),
+        use_ai4bharat=prep_cfg.get("use_ai4bharat", True),
+    )
 
-    logger.info("Generating candidates...")
-    candidate_gen = SimpleCandidateGenerator()
+    s1_norm = [transliterator.transliterate_record(r) for r in normalizer.normalize_dataset(s1)]
+    s2_norm = [transliterator.transliterate_record(r) for r in normalizer.normalize_dataset(s2)]
+    s3_norm = [transliterator.transliterate_record(r) for r in normalizer.normalize_dataset(s3)]
+
+    logger.info("Generating candidate pairs...")
+    candidate_gen = SimpleCandidateGenerator(
+        max_candidates_per_entity=block_cfg.get("max_candidates_per_entity", 100)
+    )
     pairs = candidate_gen.generate_candidates(s1_norm, s2_norm, s3_norm)
     pair_ids = [(r1.entity_id, r2.entity_id) for r1, r2 in pairs]
+    logger.info("Generated %d candidate pairs for test set.", len(pairs))
 
-    logger.info("Extracting features...")
+    logger.info("Extracting pair features...")
     feature_extractor = PairFeatureExtractor()
     features_df = feature_extractor.extract_batch_features(pairs)
 
-    logger.info("Predicting matches with EntityMatcher...")
-    matcher = EntityMatcher()
+    matcher = None
+    if model_checkpoint and Path(model_checkpoint).exists():
+        try:
+            import pickle
+            with open(model_checkpoint, "rb") as f:
+                matcher = pickle.load(f)
+            logger.info("Loaded trained matcher from %s", model_checkpoint)
+        except Exception as e:
+            logger.warning("Could not load model checkpoint from %s: %s. Using default matcher.", model_checkpoint, e)
+
+    if matcher is None:
+        matcher = EntityMatcher(threshold=model_cfg.get("threshold", 0.5))
+
+    threshold = getattr(matcher, "threshold", model_cfg.get("threshold", 0.5))
+    logger.info("Predicting matches with EntityMatcher (threshold=%.4f)...", threshold)
     pair_scores = matcher.predict_pairs(features_df)
-    predictions = matcher.predict_clusters(s1_norm, pairs, pair_scores, threshold=0.5)
+    predictions = matcher.predict_clusters(s1_norm, pairs, pair_scores, threshold=threshold)
 
     export_submission(
         s1_records=s1,

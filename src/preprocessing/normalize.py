@@ -19,9 +19,16 @@ class UnicodeNormalizer(BaseNormalizer):
     Tamil, Bengali, Gujarati, Malayalam, Oriya, Gurmukhi, etc.).
     """
 
-    def __init__(self, unicode_form: str = "NFKC", lowercase: bool = True) -> None:
-        self.unicode_form = unicode_form
+    def __init__(
+        self,
+        unicode_form: str = "NFKC",
+        lowercase: bool = True,
+        form: Optional[str] = None,
+        strip_whitespace: bool = True,
+    ) -> None:
+        self.unicode_form = form or unicode_form
         self.lowercase = lowercase
+        self.strip_whitespace = strip_whitespace
 
     def normalize(self, text: Optional[str]) -> str:
         if not text or not isinstance(text, str):
