@@ -1,0 +1,29 @@
+# Baseline Configuration for Amazon Entity Resolution Pipeline
+
+data:
+  train_dir: "student_resource/dataset/train"
+  test_dir: "student_resource/dataset/test"
+  output_submission: "submission.tsv"
+
+preprocessing:
+  normalize_unicode: true
+  form: "NFKC"
+  lowercase: true
+  strip_whitespace: true
+
+blocking:
+  generator_type: "simple"
+  max_candidates_per_entity: 100
+
+features:
+  use_name_similarity: true
+  use_address_similarity: true
+  use_country_agreement: true
+
+model:
+  type: "baseline_entity_matcher"
+  threshold: 0.5
+
+evaluation:
+  metric: "macro_f0_5"
+  beta: 0.5

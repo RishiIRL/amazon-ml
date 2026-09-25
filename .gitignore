@@ -1,0 +1,28 @@
+# Dataset and Student Resources
+student_resource/
+dataset/
+*.tsv
+*.csv
+
+# Python / Environment
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+.dist/
+build/
+dist/
+
+# Output & Artifacts
+output/
+*.log
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
